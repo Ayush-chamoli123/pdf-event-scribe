@@ -11,33 +11,42 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b bg-card">
-        <div className="container mx-auto px-6 py-4">
-          <h1 className="text-2xl font-bold text-foreground">Event Manager</h1>
-          <p className="text-sm text-muted-foreground">
-            Upload and manage your event schedules
-          </p>
+      <header className="border-b bg-card shadow-sm backdrop-blur-sm bg-card/80 sticky top-0 z-50">
+        <div className="container mx-auto px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-md">
+              <Calendar className="h-5 w-5 text-primary-foreground" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+                Event Manager
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Extract and manage events from PDF schedules
+              </p>
+            </div>
+          </div>
         </div>
       </header>
 
       <main className="container mx-auto px-6 py-8">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-4 mb-8">
-            <TabsTrigger value="upload" className="gap-2">
+          <TabsList className="grid w-full max-w-2xl mx-auto grid-cols-4 mb-8 h-12 p-1 bg-muted/50 backdrop-blur-sm">
+            <TabsTrigger value="upload" className="gap-2 data-[state=active]:bg-card data-[state=active]:shadow-sm">
               <Upload className="h-4 w-4" />
-              Upload
+              <span className="hidden sm:inline">Upload</span>
             </TabsTrigger>
-            <TabsTrigger value="table" className="gap-2">
+            <TabsTrigger value="table" className="gap-2 data-[state=active]:bg-card data-[state=active]:shadow-sm">
               <Table className="h-4 w-4" />
-              Events
+              <span className="hidden sm:inline">Events</span>
             </TabsTrigger>
-            <TabsTrigger value="calendar" className="gap-2">
+            <TabsTrigger value="calendar" className="gap-2 data-[state=active]:bg-card data-[state=active]:shadow-sm">
               <Calendar className="h-4 w-4" />
-              Calendar
+              <span className="hidden sm:inline">Calendar</span>
             </TabsTrigger>
-            <TabsTrigger value="dashboard" className="gap-2">
+            <TabsTrigger value="dashboard" className="gap-2 data-[state=active]:bg-card data-[state=active]:shadow-sm">
               <BarChart3 className="h-4 w-4" />
-              Dashboard
+              <span className="hidden sm:inline">Dashboard</span>
             </TabsTrigger>
           </TabsList>
 
