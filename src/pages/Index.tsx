@@ -18,11 +18,11 @@ const Index = () => {
               <Calendar className="h-5 w-5 text-primary-foreground" />
             </div>
             <div>
-              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
-                Event Manager
+              <h1 className="text-2xl font-bold bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
+                AI SOF Event Extractor
               </h1>
               <p className="text-sm text-muted-foreground">
-                Extract and manage events from PDF schedules
+                Smart AI-powered extraction from Schedule of Events PDFs
               </p>
             </div>
           </div>

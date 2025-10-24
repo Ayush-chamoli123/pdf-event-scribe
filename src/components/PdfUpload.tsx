@@ -178,7 +178,7 @@ const PdfUpload = ({ onUploadComplete }: PdfUploadProps) => {
               <div className="space-y-3 p-4 bg-primary/5 rounded-lg border border-primary/20">
                 <Progress value={progress} className="h-2" />
                 <p className="text-sm text-center text-muted-foreground font-medium">
-                  Extracting events from PDFs... {Math.round(progress)}%
+                  AI Agent analyzing PDFs and extracting events... {Math.round(progress)}%
                 </p>
               </div>
             )}
@@ -189,7 +189,7 @@ const PdfUpload = ({ onUploadComplete }: PdfUploadProps) => {
               className="w-full shadow-md hover:shadow-lg transition-all"
               size="lg"
             >
-              {uploading ? "Processing..." : `Extract Events from ${files.length} PDF${files.length !== 1 ? 's' : ''}`}
+              {uploading ? "Extracting with AI Agent..." : `Extract Events using AI Agent (${files.length} PDF${files.length !== 1 ? 's' : ''})`}
             </Button>
           </div>
         )}

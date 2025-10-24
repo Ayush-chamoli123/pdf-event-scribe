@@ -61,25 +61,46 @@ async function parseEventsFromText(text: string, fileName: string): Promise<any[
       messages: [
         {
           role: "system",
-          content: `You are an expert at extracting event information from Schedule of Events (SOF) documents. 
-Extract ALL events from the text, including:
-1. Normal events with format like "@ HHMM-HHMM HRS" or "@ HHMM HRS"
-2. Embedded events within sentences
-3. Events with various date formats
+          content: `You are an expert AI Agent specialized in extracting event information from Schedule of Events (SOF) documents with inconsistent formatting.
 
-For each event, extract:
-- Date (convert to YYYY-MM-DD format)
-- Start time (convert to HH:MM:SS format, use 24-hour format)
-- End time (convert to HH:MM:SS format if available, otherwise null)
-- Description (the event description/activity)
+CRITICAL EXTRACTION RULES:
+1. Identify ALL events, even with irregular formats like:
+   - "Meeting : ON OCT 21 @ 1500 HOURS"
+   - "@ 0900 HRS. : INWARD FORMALITIES"
+   - "@ HHMM-HHMM HRS" or "@ HHMM HRS"
+   - "09:00 to 10:00" or "0900-1000"
+   - Times embedded in sentences
 
-Return a JSON array of events. Each event should have: event_date, start_time, end_time, description.
-If you cannot determine a date, use today's date. If time format is unclear, make best guess based on context.
-Extract as many events as possible - don't miss any!`
+2. Date formats to handle:
+   - "Oct 20, 2025", "OCT 21", "2025-10-20", "20/10/2025"
+   - Dates mentioned before or after event descriptions
+   - Relative dates like "tomorrow" or "next Monday"
+
+3. Time formats to normalize:
+   - Military time: 0900, 1500, 2300 → convert to HH:MM:SS (09:00:00, 15:00:00, 23:00:00)
+   - HRS/HOURS suffix: "@ 1500 HOURS" → 15:00:00
+   - Range: "0900-1000" → start: 09:00:00, end: 10:00:00
+   - AM/PM: "9:00 AM" → 09:00:00
+
+4. Output format (STRICT JSON):
+{
+  "events": [
+    {
+      "event_date": "YYYY-MM-DD",
+      "start_time": "HH:MM:SS",
+      "end_time": "HH:MM:SS or null",
+      "description": "Clean event description"
+    }
+  ]
+}
+
+5. If dates/times are ambiguous, make intelligent guesses based on context.
+6. Extract EVERY event - missing events is worse than minor inaccuracies.
+7. Clean up descriptions - remove extra whitespace, special characters.`
         },
         {
           role: "user",
-          content: `Extract all events from this text:\n\n${text}`
+          content: `Extract all events from this Schedule of Events document:\n\n${text}`
         }
       ],
       response_format: { type: "json_object" }
@@ -90,13 +111,13 @@ Extract as many events as possible - don't miss any!`
   const parsed = JSON.parse(result.choices[0].message.content);
   const events = parsed.events || [];
   
-  // Add source_pdf to each event
+  // Add source_pdf to each event and ensure proper formatting
   return events.map((event: any) => ({
-    ...event,
-    source_pdf: fileName,
-    // Ensure proper time format
+    event_date: event.event_date,
     start_time: event.start_time?.length === 5 ? `${event.start_time}:00` : event.start_time,
     end_time: event.end_time?.length === 5 ? `${event.end_time}:00` : event.end_time,
+    description: event.description,
+    source_pdf: fileName,
   }));
 }
 

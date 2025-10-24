@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, ArrowUpDown, Trash2 } from "lucide-react";
+import { Search, ArrowUpDown, Trash2, Download } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -135,6 +135,32 @@ const EventsTable = () => {
     }
   };
 
+  const downloadJSON = () => {
+    const exportData = filteredEvents.map((event) => ({
+      date: format(new Date(event.event_date), "MMM dd, yyyy"),
+      start_time: event.start_time,
+      end_time: event.end_time || null,
+      event_description: event.description,
+      source_pdf: event.source_pdf,
+    }));
+
+    const dataStr = JSON.stringify(exportData, null, 2);
+    const dataBlob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `events_${format(new Date(), "yyyy-MM-dd")}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "JSON Downloaded",
+      description: `${exportData.length} events exported successfully`,
+    });
+  };
+
   if (loading) {
     return (
       <Card className="p-8">
@@ -145,11 +171,30 @@ const EventsTable = () => {
 
   return (
     <div className="space-y-4">
-      <Card className="p-4">
+      <Card className="p-6 shadow-lg border-border/50 backdrop-blur-sm bg-card/95">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-2xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
+              AI SOF Event Extractor
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1">
+              {filteredEvents.length} event{filteredEvents.length !== 1 ? "s" : ""} found
+            </p>
+          </div>
+          <Button
+            onClick={downloadJSON}
+            variant="default"
+            className="gap-2"
+            disabled={filteredEvents.length === 0}
+          >
+            <Download className="h-4 w-4" />
+            Download JSON
+          </Button>
+        </div>
         <div className="flex items-center gap-2">
           <Search className="h-5 w-5 text-muted-foreground" />
           <Input
-            placeholder="Search events..."
+            placeholder="Search by description, date, or source PDF..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="flex-1"
