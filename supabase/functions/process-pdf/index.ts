@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import "https://deno.land/x/xhr@0.3.0/mod.ts";
+import { encode as encodeBase64 } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -9,9 +10,9 @@ const corsHeaders = {
 };
 
 async function extractTextFromPDF(pdfData: Blob): Promise<string> {
-  // Convert PDF to base64 for AI processing
+  // Convert PDF to base64 for AI processing (safe, no call stack overflow)
   const arrayBuffer = await pdfData.arrayBuffer();
-  const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+  const base64 = encodeBase64(arrayBuffer);
   
   const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
   
@@ -22,14 +23,14 @@ async function extractTextFromPDF(pdfData: Blob): Promise<string> {
       "Authorization": `Bearer ${lovableApiKey}`,
     },
     body: JSON.stringify({
-      model: "google/gemini-2.5-flash",
+      model: "google/gemini-2.5-pro",
       messages: [
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Extract all text from this PDF document. Focus on capturing dates, times (especially in format @ HHMM-HHMM HRS), and event descriptions. Return the raw extracted text."
+              text: "You are performing robust OCR and text extraction from a multi-page maritime Statement of Facts (SOF) PDF. Extract all lines that could contain dated/time-stamped events, preserving order. Return plain text only."
             },
             {
               type: "image_url",
@@ -43,8 +44,15 @@ async function extractTextFromPDF(pdfData: Blob): Promise<string> {
     }),
   });
 
+  if (!response.ok) {
+    if (response.status === 429) throw new Error("AI rate limit exceeded. Please retry shortly.");
+    if (response.status === 402) throw new Error("AI credits exhausted. Please top up usage.");
+    const t = await response.text();
+    throw new Error(`AI gateway error (${response.status}): ${t}`);
+  }
+
   const result = await response.json();
-  return result.choices[0].message.content;
+  return result.choices?.[0]?.message?.content ?? "";
 }
 
 async function parseEventsFromText(text: string, fileName: string): Promise<any[]> {
