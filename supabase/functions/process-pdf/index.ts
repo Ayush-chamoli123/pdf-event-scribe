@@ -61,46 +61,67 @@ async function parseEventsFromText(text: string, fileName: string): Promise<any[
       messages: [
         {
           role: "system",
-          content: `You are an expert AI Agent specialized in extracting event information from Schedule of Events (SOF) documents with inconsistent formatting.
+          content: `You are an expert AI Agent specialized in extracting ALL event information from Schedule of Events (SOF) documents, particularly maritime vessel SOF documents.
 
 CRITICAL EXTRACTION RULES:
-1. Identify ALL events, even with irregular formats like:
-   - "Meeting : ON OCT 21 @ 1500 HOURS"
-   - "@ 0900 HRS. : INWARD FORMALITIES"
-   - "@ HHMM-HHMM HRS" or "@ HHMM HRS"
-   - "09:00 to 10:00" or "0900-1000"
-   - Times embedded in sentences
+1. Extract EVERY SINGLE EVENT from the document. Common patterns include:
+   - "DESCRIPTION: ON [DATE] @ [TIME] HOURS"
+   - "@ [TIME] HRS: DESCRIPTION"
+   - "ON [DATE] @ [TIME]-[TIME] HRS: DESCRIPTION"
+   - "[TIME]-[TIME] HRS: DESCRIPTION"
+   - Lines starting with "@" followed by time and description
+   - Lines ending with "HOURS" or "HRS"
 
-2. Date formats to handle:
-   - "Oct 20, 2025", "OCT 21", "2025-10-20", "20/10/2025"
-   - Dates mentioned before or after event descriptions
-   - Relative dates like "tomorrow" or "next Monday"
+2. Date formats you MUST handle:
+   - "APR. 19, 2024", "APRIL 19, 2024", "APR 19, 2024"
+   - "MAY 04, 2024", "MAY. 04, 2024"
+   - "OCT 21", "Oct 20, 2025"
+   - If date is only mentioned once (e.g., "ON APRIL 20, 2024"), apply it to ALL subsequent events until a new date appears
+   - Default to the most recent date mentioned if not explicitly stated
 
-3. Time formats to normalize:
-   - Military time: 0900, 1500, 2300 → convert to HH:MM:SS (09:00:00, 15:00:00, 23:00:00)
-   - HRS/HOURS suffix: "@ 1500 HOURS" → 15:00:00
-   - Range: "0900-1000" → start: 09:00:00, end: 10:00:00
-   - AM/PM: "9:00 AM" → 09:00:00
+3. Time formats you MUST normalize:
+   - Military time: "1540", "0800", "1724" → "15:40:00", "08:00:00", "17:24:00"
+   - Time ranges: "1724-1830" → start: "17:24:00", end: "18:30:00"
+   - Time ranges: "0800-1000" → start: "08:00:00", end: "10:00:00"
+   - Single times: "@ 1654 HRS" → start: "16:54:00", end: null
+   - Handle "HRS", "HOURS", "HRS.", "HRS:" suffixes
 
-4. Output format (STRICT JSON):
+4. Description cleaning:
+   - Remove date/time prefixes like "ON APR. 19, 2024 @", "@ 1540 HRS:", etc.
+   - Keep the meaningful event description
+   - Example: "ON APR. 19, 2024 @ 1540 HOURS: NOTICE OF READINESS TENDERED" → "NOTICE OF READINESS TENDERED"
+   - Preserve important details but remove redundant formatting
+
+5. STRICT JSON Output format:
 {
   "events": [
     {
-      "event_date": "YYYY-MM-DD",
-      "start_time": "HH:MM:SS",
-      "end_time": "HH:MM:SS or null",
-      "description": "Clean event description"
+      "event_date": "2024-04-19",
+      "start_time": "15:40:00",
+      "end_time": "16:54:00",
+      "description": "VESSEL ARRIVED AT SRIRACHA PILOT STATION"
     }
   ]
 }
 
-5. If dates/times are ambiguous, make intelligent guesses based on context.
-6. Extract EVERY event - missing events is worse than minor inaccuracies.
-7. Clean up descriptions - remove extra whitespace, special characters.`
+6. Context awareness:
+   - If a date appears like "ON APRIL 20, 2024" and then multiple events follow with just times, apply that date to all those events
+   - Look for section headers that indicate dates
+   - Be intelligent about inferring dates from context
+
+7. IGNORE:
+   - Table headers
+   - Page numbers
+   - Company names and addresses
+   - Vessel names and details at the top
+   - Lines like "TO BE CONTINUED"
+   - Pure metadata without events
+
+8. YOUR PRIMARY GOAL: Extract EVERY SINGLE EVENT. Missing events is the worst outcome. If unsure about a date, make an intelligent guess based on surrounding context.`
         },
         {
           role: "user",
-          content: `Extract all events from this Schedule of Events document:\n\n${text}`
+          content: `Extract ALL events from this Schedule of Events document. Be thorough and extract every single event line:\n\n${text}`
         }
       ],
       response_format: { type: "json_object" }
