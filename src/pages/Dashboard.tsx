@@ -18,6 +18,7 @@ interface Event {
 }
 
 const Dashboard = () => {
+  console.log("Dashboard component rendering");
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();

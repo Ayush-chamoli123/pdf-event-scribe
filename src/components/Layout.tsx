@@ -9,6 +9,7 @@ interface LayoutProps {
 
 const Layout = ({ children }: LayoutProps) => {
   const location = useLocation();
+  console.log("Layout rendering, location:", location.pathname);
 
   const navItems = [
     { path: "/", icon: LayoutDashboard, label: "Dashboard" },
