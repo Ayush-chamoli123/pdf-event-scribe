@@ -1,12 +1,24 @@
 import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, RefreshCw, Clock, FileText } from "lucide-react";
+import { ArrowLeft, RefreshCw, Clock, FileText, CheckCircle, AlertCircle } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import EventsTable from "@/components/EventsTable";
 import { format } from "date-fns";
+
+interface Document {
+  id: string;
+  filename: string;
+  file_path: string;
+  status: 'processing' | 'completed' | 'failed';
+  events_count: number;
+  error_message: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
 
 interface Event {
   id: string;
@@ -21,44 +33,82 @@ interface Event {
 const Processing = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [documents, setDocuments] = useState<Document[]>([]);
+  const [selectedDoc, setSelectedDoc] = useState<Document | null>(null);
   const [events, setEvents] = useState<Event[]>([]);
-  const [selectedPdf, setSelectedPdf] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchEvents();
-    const channel = supabase
-      .channel("processing-changes")
+    fetchData();
+    const docsChannel = supabase
+      .channel("documents-changes")
+      .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, () => {
+        fetchData();
+      })
+      .subscribe();
+    const eventsChannel = supabase
+      .channel("events-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => {
-        fetchEvents();
+        if (selectedDoc) fetchEventsForDocument(selectedDoc.filename);
       })
       .subscribe();
     return () => {
-      supabase.removeChannel(channel);
+      supabase.removeChannel(docsChannel);
+      supabase.removeChannel(eventsChannel);
     };
   }, []);
 
-  const fetchEvents = async () => {
+  const fetchData = async () => {
     try {
       const { data, error } = await supabase
-        .from("events")
+        .from("documents")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setEvents(data || []);
-      if (data && data.length > 0 && !selectedPdf) {
-        setSelectedPdf(data[0].source_pdf);
+      setDocuments((data || []) as Document[]);
+      if (data && data.length > 0 && !selectedDoc) {
+        setSelectedDoc(data[0] as Document);
+        fetchEventsForDocument(data[0].filename);
       }
     } catch (error) {
       console.error("Error:", error);
-      toast({ title: "Error", description: "Failed to load data", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to load documents", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
-  const uniquePdfs = Array.from(new Set(events.map(e => e.source_pdf)));
-  const filteredEvents = selectedPdf ? events.filter(e => e.source_pdf === selectedPdf) : events;
+  const fetchEventsForDocument = async (filename: string) => {
+    try {
+      const { data, error } = await supabase
+        .from("events")
+        .select("*")
+        .eq("source_pdf", filename)
+        .order("event_date", { ascending: true });
+      if (error) throw error;
+      setEvents(data || []);
+    } catch (error) {
+      console.error("Error:", error);
+    }
+  };
+
+  const handleSelectDoc = (doc: Document) => {
+    setSelectedDoc(doc);
+    fetchEventsForDocument(doc.filename);
+  };
+
+  const getStatusConfig = (status: string) => {
+    switch (status) {
+      case 'completed':
+        return { icon: CheckCircle, color: 'bg-green-100 text-green-700', label: 'Completed' };
+      case 'processing':
+        return { icon: Clock, color: 'bg-orange-100 text-orange-700', label: 'Processing' };
+      case 'failed':
+        return { icon: AlertCircle, color: 'bg-red-100 text-red-700', label: 'Failed' };
+      default:
+        return { icon: Clock, color: 'bg-slate-100 text-slate-700', label: 'Unknown' };
+    }
+  };
 
   return (
     <div className="p-8">
@@ -73,7 +123,7 @@ const Processing = () => {
               <p className="text-muted-foreground mt-1">Monitor document processing and view extracted events</p>
             </div>
           </div>
-          <Button variant="outline" onClick={fetchEvents}>
+          <Button variant="outline" onClick={fetchData}>
             <RefreshCw className="w-4 h-4 mr-2" />
             Refresh
           </Button>
@@ -86,29 +136,34 @@ const Processing = () => {
               <div className="space-y-2">
                 {loading ? (
                   <p className="text-center py-4 text-muted-foreground">Loading...</p>
-                ) : uniquePdfs.length === 0 ? (
+                ) : documents.length === 0 ? (
                   <p className="text-center py-4 text-muted-foreground">No documents</p>
                 ) : (
-                  uniquePdfs.map((pdf) => {
-                    const pdfEvents = events.filter(e => e.source_pdf === pdf);
-                    const latestEvent = pdfEvents[0];
-                    const isSelected = selectedPdf === pdf;
+                  documents.map((doc) => {
+                    const isSelected = selectedDoc?.id === doc.id;
+                    const statusConfig = getStatusConfig(doc.status);
+                    const StatusIcon = statusConfig.icon;
                     return (
                       <button
-                        key={pdf}
-                        onClick={() => setSelectedPdf(pdf)}
+                        key={doc.id}
+                        onClick={() => handleSelectDoc(doc)}
                         className={`w-full text-left p-4 rounded-lg border transition-colors ${
                           isSelected ? "border-blue-600 bg-blue-50" : "border-border hover:bg-accent"
                         }`}
                       >
                         <div className="flex items-start gap-3">
-                          <Clock className="w-5 h-5 text-orange-500 mt-0.5" />
+                          <StatusIcon className={`w-5 h-5 mt-0.5 ${
+                            doc.status === 'completed' ? 'text-green-500' :
+                            doc.status === 'failed' ? 'text-red-500' : 'text-orange-500'
+                          }`} />
                           <div className="flex-1 min-w-0">
-                            <p className="font-medium truncate">({pdfEvents.length}) {pdf}</p>
+                            <p className="font-medium truncate">({doc.events_count}) {doc.filename}</p>
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded">Processing</span>
+                              <Badge className={`${statusConfig.color} text-xs border-none`}>
+                                {statusConfig.label}
+                              </Badge>
                               <span className="text-xs text-muted-foreground">
-                                {latestEvent && format(new Date(latestEvent.created_at), "MMM dd, HH:mm")}
+                                {format(new Date(doc.created_at), "MMM dd, HH:mm")}
                               </span>
                             </div>
                           </div>
@@ -122,17 +177,30 @@ const Processing = () => {
           </div>
 
           <div className="lg:col-span-2">
-            {selectedPdf ? (
+            {selectedDoc ? (
               <Card className="p-6">
                 <div className="flex items-center justify-between mb-6">
                   <div className="flex items-center gap-3">
                     <FileText className="w-6 h-6 text-blue-600" />
                     <div>
                       <h2 className="font-semibold">Extracted Events</h2>
-                      <p className="text-sm text-muted-foreground">{filteredEvents.length} events found</p>
+                      <p className="text-sm text-muted-foreground">{events.length} events found</p>
                     </div>
                   </div>
+                  {selectedDoc.status === 'completed' && (
+                    <Badge className="bg-green-100 text-green-700 border-none">
+                      <CheckCircle className="w-3 h-3 mr-1" />
+                      Processing Complete
+                    </Badge>
+                  )}
                 </div>
+                {selectedDoc.status === 'failed' && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                    <p className="text-sm text-red-700">
+                      <strong>Error:</strong> {selectedDoc.error_message || 'Processing failed'}
+                    </p>
+                  </div>
+                )}
                 <EventsTable />
               </Card>
             ) : (

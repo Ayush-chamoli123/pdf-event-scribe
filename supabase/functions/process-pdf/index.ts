@@ -78,9 +78,9 @@ serve(async (req) => {
   }
 
   try {
-    const { filePath, fileName } = await req.json();
+    const { filePath, fileName, documentId } = await req.json();
 
-    console.log("Processing PDF:", fileName);
+    console.log("Processing PDF:", fileName, "Document ID:", documentId);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -128,6 +128,24 @@ serve(async (req) => {
 
     console.log("Events inserted successfully");
 
+    // Update document status to completed
+    if (documentId) {
+      const { error: updateError } = await supabase
+        .from("documents")
+        .update({
+          status: 'completed',
+          events_count: events.length,
+          completed_at: new Date().toISOString()
+        })
+        .eq('id', documentId);
+
+      if (updateError) {
+        console.error("Error updating document status:", updateError);
+      } else {
+        console.log("Document status updated to completed");
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -140,6 +158,23 @@ serve(async (req) => {
     );
   } catch (error) {
     console.error("Error processing PDF:", error);
+
+    // Update document status to failed if documentId provided
+    const { documentId } = await req.json().catch(() => ({}));
+    if (documentId) {
+      const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+      const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+      const supabase = createClient(supabaseUrl, supabaseKey);
+      
+      await supabase
+        .from("documents")
+        .update({
+          status: 'failed',
+          error_message: error instanceof Error ? error.message : "Unknown error"
+        })
+        .eq('id', documentId);
+    }
+
     return new Response(
       JSON.stringify({
         error: error instanceof Error ? error.message : "Unknown error",

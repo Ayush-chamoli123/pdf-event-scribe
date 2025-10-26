@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      documents: {
+        Row: {
+          completed_at: string | null
+          created_at: string | null
+          error_message: string | null
+          events_count: number | null
+          file_path: string
+          filename: string
+          id: string
+          status: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          events_count?: number | null
+          file_path: string
+          filename: string
+          id?: string
+          status?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string | null
+          error_message?: string | null
+          events_count?: number | null
+          file_path?: string
+          filename?: string
+          id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           created_at: string | null

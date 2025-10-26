@@ -7,6 +7,15 @@ import { Link } from "react-router-dom";
 import { FileText, CheckCircle, Clock, TrendingUp, AlertCircle, Plus, RefreshCw, Eye, Zap } from "lucide-react";
 import { format } from "date-fns";
 
+interface Document {
+  id: string;
+  filename: string;
+  status: 'processing' | 'completed' | 'failed';
+  events_count: number;
+  created_at: string;
+  completed_at: string | null;
+}
+
 interface Event {
   id: string;
   event_date: string;
@@ -19,16 +28,16 @@ interface Event {
 
 const Dashboard = () => {
   console.log("Dashboard component rendering");
-  const [events, setEvents] = useState<Event[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchEvents();
+    fetchData();
     const channel = supabase
       .channel("dashboard-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => {
-        fetchEvents();
+      .on("postgres_changes", { event: "*", schema: "public", table: "documents" }, () => {
+        fetchData();
       })
       .subscribe();
     return () => {
@@ -36,14 +45,14 @@ const Dashboard = () => {
     };
   }, []);
 
-  const fetchEvents = async () => {
+  const fetchData = async () => {
     try {
       const { data, error } = await supabase
-        .from("events")
+        .from("documents")
         .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      setEvents(data || []);
+      setDocuments((data || []) as Document[]);
     } catch (error) {
       console.error("Error:", error);
       toast({ title: "Error", description: "Failed to load data", variant: "destructive" });
@@ -52,8 +61,38 @@ const Dashboard = () => {
     }
   };
 
-  const uniquePdfs = new Set(events.map((e) => e.source_pdf)).size;
-  const recentDocs = Array.from(new Set(events.map(e => e.source_pdf))).slice(0, 5);
+  const totalDocs = documents.length;
+  const completedDocs = documents.filter(d => d.status === 'completed').length;
+  const processingDocs = documents.filter(d => d.status === 'processing').length;
+  const totalEvents = documents.reduce((sum, d) => sum + d.events_count, 0);
+  const recentDocs = documents.slice(0, 5);
+
+  const getStatusIcon = (status: string) => {
+    switch(status) {
+      case 'completed': return CheckCircle;
+      case 'processing': return Clock;
+      case 'failed': return AlertCircle;
+      default: return FileText;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch(status) {
+      case 'completed': return 'text-green-500';
+      case 'processing': return 'text-orange-500';
+      case 'failed': return 'text-red-500';
+      default: return 'text-slate-500';
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    switch(status) {
+      case 'completed': return 'bg-green-100 text-green-700';
+      case 'processing': return 'bg-orange-100 text-orange-700';
+      case 'failed': return 'bg-red-100 text-red-700';
+      default: return 'bg-slate-100 text-slate-700';
+    }
+  };
 
   const StatCard = ({ title, value, icon: Icon, gradient }: any) => (
     <Card className="p-6">
@@ -86,10 +125,10 @@ const Dashboard = () => {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-          <StatCard title="TOTAL DOCUMENTS" value={uniquePdfs} icon={FileText} gradient="from-blue-500 to-blue-600" />
-          <StatCard title="COMPLETED" value={uniquePdfs} icon={CheckCircle} gradient="from-green-500 to-green-600" />
-          <StatCard title="PROCESSING" value={0} icon={Clock} gradient="from-orange-500 to-orange-600" />
-          <StatCard title="EVENTS EXTRACTED" value={events.length} icon={TrendingUp} gradient="from-purple-500 to-purple-600" />
+          <StatCard title="TOTAL DOCUMENTS" value={totalDocs} icon={FileText} gradient="from-blue-500 to-blue-600" />
+          <StatCard title="COMPLETED" value={completedDocs} icon={CheckCircle} gradient="from-green-500 to-green-600" />
+          <StatCard title="PROCESSING" value={processingDocs} icon={Clock} gradient="from-orange-500 to-orange-600" />
+          <StatCard title="EVENTS EXTRACTED" value={totalEvents} icon={TrendingUp} gradient="from-purple-500 to-purple-600" />
           <StatCard title="AVG TIME (S)" value="0.0" icon={AlertCircle} gradient="from-indigo-500 to-indigo-600" />
         </div>
 
@@ -98,7 +137,7 @@ const Dashboard = () => {
             <Card className="p-6">
               <div className="flex justify-between items-center mb-6">
                 <h2 className="text-xl font-semibold">Recent Documents</h2>
-                <Button variant="ghost" size="sm" onClick={fetchEvents}>
+                <Button variant="ghost" size="sm" onClick={fetchData}>
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Refresh
                 </Button>
@@ -109,19 +148,20 @@ const Dashboard = () => {
                 ) : recentDocs.length === 0 ? (
                   <p className="text-center py-8 text-muted-foreground">No documents yet</p>
                 ) : (
-                  recentDocs.map((pdf, idx) => {
-                    const docEvents = events.filter(e => e.source_pdf === pdf);
-                    const latestEvent = docEvents[0];
+                  recentDocs.map((doc) => {
+                    const StatusIcon = getStatusIcon(doc.status);
                     return (
-                      <div key={idx} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors">
+                      <div key={doc.id} className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors">
                         <div className="flex items-center gap-3">
-                          <Clock className="w-5 h-5 text-orange-500" />
+                          <StatusIcon className={`w-5 h-5 ${getStatusColor(doc.status)}`} />
                           <div>
-                            <p className="font-medium">({docEvents.length}) {pdf}</p>
+                            <p className="font-medium">({doc.events_count}) {doc.filename}</p>
                             <div className="flex items-center gap-2 mt-1">
-                              <span className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">uploaded</span>
+                              <span className={`text-xs px-2 py-1 rounded ${getStatusBadge(doc.status)}`}>
+                                {doc.status}
+                              </span>
                               <span className="text-xs text-muted-foreground">
-                                {latestEvent && format(new Date(latestEvent.created_at), "MMM dd, yyyy 'at' h:mm a")}
+                                {format(new Date(doc.created_at), "MMM dd, yyyy 'at' h:mm a")}
                               </span>
                             </div>
                           </div>
@@ -170,7 +210,7 @@ const Dashboard = () => {
                 </div>
                 <div className="pt-4 border-t">
                   <p className="text-sm text-muted-foreground">Total Events Extracted</p>
-                  <p className="text-2xl font-bold text-blue-600 mt-1">{events.length}</p>
+                  <p className="text-2xl font-bold text-blue-600 mt-1">{totalEvents}</p>
                 </div>
               </div>
             </Card>

@@ -45,8 +45,22 @@ const Upload = () => {
 
       if (uploadError) throw uploadError;
 
+      // Create document record
+      const { data: docData, error: docError } = await supabase
+        .from("documents")
+        .insert({
+          filename: file.name,
+          file_path: fileName,
+          status: 'processing'
+        })
+        .select()
+        .single();
+
+      if (docError) throw docError;
+
+      // Trigger processing
       const { error: functionError } = await supabase.functions.invoke("process-pdf", {
-        body: { filePath: fileName, fileName: file.name }
+        body: { filePath: fileName, fileName: file.name, documentId: docData.id }
       });
 
       if (functionError) throw functionError;
