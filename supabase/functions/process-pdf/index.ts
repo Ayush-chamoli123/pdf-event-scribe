@@ -9,53 +9,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-async function extractTextFromPDF(pdfData: Blob): Promise<string> {
-  // Convert PDF to base64 for AI processing (safe, no call stack overflow)
-  const arrayBuffer = await pdfData.arrayBuffer();
-  const base64 = encodeBase64(arrayBuffer);
-  
-  const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
-  
-  const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Authorization": `Bearer ${lovableApiKey}`,
-    },
-    body: JSON.stringify({
-      model: "google/gemini-2.5-pro",
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: "You are performing robust OCR and text extraction from a multi-page maritime Statement of Facts (SOF) PDF. Extract all lines that could contain dated/time-stamped events, preserving order. Return plain text only."
-            },
-            {
-              type: "image_url",
-              image_url: {
-                url: `data:application/pdf;base64,${base64}`
-              }
-            }
-          ]
-        }
-      ]
-    }),
-  });
-
-  if (!response.ok) {
-    if (response.status === 429) throw new Error("AI rate limit exceeded. Please retry shortly.");
-    if (response.status === 402) throw new Error("AI credits exhausted. Please top up usage.");
-    const t = await response.text();
-    throw new Error(`AI gateway error (${response.status}): ${t}`);
-  }
-
-  const result = await response.json();
-  return result.choices?.[0]?.message?.content ?? "";
-}
-
-async function parseEventsFromText(text: string, fileName: string): Promise<any[]> {
+async function extractAndParseEventsFromPDF(pdfUrl: string, fileName: string): Promise<any[]> {
   const lovableApiKey = Deno.env.get("LOVABLE_API_KEY")!;
   
   const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
@@ -69,38 +23,14 @@ async function parseEventsFromText(text: string, fileName: string): Promise<any[
       messages: [
         {
           role: "system",
-          content: `You are an expert AI Agent specialized in extracting ALL event information from Schedule of Events (SOF) documents, particularly maritime vessel SOF documents.
+          content: `You are an expert AI Agent specialized in extracting event information from documents. Extract ALL events with dates and times.
 
 CRITICAL EXTRACTION RULES:
-1. Extract EVERY SINGLE EVENT from the document. Common patterns include:
-   - "DESCRIPTION: ON [DATE] @ [TIME] HOURS"
-   - "@ [TIME] HRS: DESCRIPTION"
-   - "ON [DATE] @ [TIME]-[TIME] HRS: DESCRIPTION"
-   - "[TIME]-[TIME] HRS: DESCRIPTION"
-   - Lines starting with "@" followed by time and description
-   - Lines ending with "HOURS" or "HRS"
-
-2. Date formats you MUST handle:
-   - "APR. 19, 2024", "APRIL 19, 2024", "APR 19, 2024"
-   - "MAY 04, 2024", "MAY. 04, 2024"
-   - "OCT 21", "Oct 20, 2025"
-   - If date is only mentioned once (e.g., "ON APRIL 20, 2024"), apply it to ALL subsequent events until a new date appears
-   - Default to the most recent date mentioned if not explicitly stated
-
-3. Time formats you MUST normalize:
-   - Military time: "1540", "0800", "1724" → "15:40:00", "08:00:00", "17:24:00"
-   - Time ranges: "1724-1830" → start: "17:24:00", end: "18:30:00"
-   - Time ranges: "0800-1000" → start: "08:00:00", end: "10:00:00"
-   - Single times: "@ 1654 HRS" → start: "16:54:00", end: null
-   - Handle "HRS", "HOURS", "HRS.", "HRS:" suffixes
-
-4. Description cleaning:
-   - Remove date/time prefixes like "ON APR. 19, 2024 @", "@ 1540 HRS:", etc.
-   - Keep the meaningful event description
-   - Example: "ON APR. 19, 2024 @ 1540 HOURS: NOTICE OF READINESS TENDERED" → "NOTICE OF READINESS TENDERED"
-   - Preserve important details but remove redundant formatting
-
-5. STRICT JSON Output format:
+1. Extract EVERY event with a date and time
+2. Date formats: "APR. 19, 2024", "APRIL 19, 2024", "APR 19, 2024", "May 04, 2024"
+3. Time formats: Military time "1540", "0800" → "15:40:00", "08:00:00"
+4. Time ranges: "1724-1830" → start: "17:24:00", end: "18:30:00"
+5. Output format (JSON):
 {
   "events": [
     {
@@ -110,37 +40,29 @@ CRITICAL EXTRACTION RULES:
       "description": "VESSEL ARRIVED AT SRIRACHA PILOT STATION"
     }
   ]
-}
-
-6. Context awareness:
-   - If a date appears like "ON APRIL 20, 2024" and then multiple events follow with just times, apply that date to all those events
-   - Look for section headers that indicate dates
-   - Be intelligent about inferring dates from context
-
-7. IGNORE:
-   - Table headers
-   - Page numbers
-   - Company names and addresses
-   - Vessel names and details at the top
-   - Lines like "TO BE CONTINUED"
-   - Pure metadata without events
-
-8. YOUR PRIMARY GOAL: Extract EVERY SINGLE EVENT. Missing events is the worst outcome. If unsure about a date, make an intelligent guess based on surrounding context.`
+}`
         },
         {
           role: "user",
-          content: `Extract ALL events from this Schedule of Events document. Be thorough and extract every single event line:\n\n${text}`
+          content: `Extract ALL events with dates and times from this document: ${pdfUrl}`
         }
       ],
       response_format: { type: "json_object" }
     }),
   });
 
+  if (!response.ok) {
+    if (response.status === 429) throw new Error("AI rate limit exceeded. Please retry shortly.");
+    if (response.status === 402) throw new Error("AI credits exhausted. Please top up usage.");
+    const errorText = await response.text();
+    throw new Error(`AI gateway error (${response.status}): ${errorText}`);
+  }
+
   const result = await response.json();
   const parsed = JSON.parse(result.choices[0].message.content);
   const events = parsed.events || [];
   
-  // Add source_pdf to each event and ensure proper formatting
+  // Add source_pdf to each event
   return events.map((event: any) => ({
     event_date: event.event_date,
     start_time: event.start_time?.length === 5 ? `${event.start_time}:00` : event.start_time,
@@ -149,6 +71,7 @@ CRITICAL EXTRACTION RULES:
     source_pdf: fileName,
   }));
 }
+
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -164,27 +87,21 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Download the PDF from storage
-    const { data: fileData, error: downloadError } = await supabase.storage
+    // Get public URL for the PDF
+    const { data: urlData } = supabase.storage
       .from("pdfs")
-      .download(filePath);
+      .getPublicUrl(filePath);
 
-    if (downloadError) {
-      console.error("Download error:", downloadError);
-      throw downloadError;
+    if (!urlData?.publicUrl) {
+      throw new Error("Could not generate public URL for PDF");
     }
 
-    console.log("PDF downloaded, size:", fileData.size);
+    console.log("Processing PDF from URL:", urlData.publicUrl);
 
-    // Extract text from PDF using AI
-    console.log("Extracting text from PDF...");
-    const extractedText = await extractTextFromPDF(fileData);
-    console.log("Text extracted, length:", extractedText.length);
-
-    // Parse events from extracted text
-    console.log("Parsing events from text...");
-    const events = await parseEventsFromText(extractedText, fileName);
-    console.log("Events parsed:", events.length);
+    // Extract and parse events directly from PDF URL
+    console.log("Extracting events from PDF...");
+    const events = await extractAndParseEventsFromPDF(urlData.publicUrl, fileName);
+    console.log("Events extracted:", events.length);
 
     if (events.length === 0) {
       console.warn("No events found in PDF");
