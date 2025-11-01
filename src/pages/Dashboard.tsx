@@ -14,6 +14,8 @@ interface Document {
   events_count: number;
   created_at: string;
   completed_at: string | null;
+  processing_time_seconds: number | null;
+  confidence_score: number | null;
 }
 
 interface Event {
@@ -66,6 +68,19 @@ const Dashboard = () => {
   const processingDocs = documents.filter(d => d.status === 'processing').length;
   const totalEvents = documents.reduce((sum, d) => sum + d.events_count, 0);
   const recentDocs = documents.slice(0, 5);
+
+  // Calculate metrics
+  const successRate = totalDocs > 0 ? ((completedDocs / totalDocs) * 100).toFixed(1) : '0.0';
+  
+  const completedDocsWithTime = documents.filter(d => d.status === 'completed' && d.processing_time_seconds);
+  const avgProcessingTime = completedDocsWithTime.length > 0
+    ? (completedDocsWithTime.reduce((sum, d) => sum + (d.processing_time_seconds || 0), 0) / completedDocsWithTime.length).toFixed(1)
+    : '0.0';
+  
+  const completedDocsWithConfidence = documents.filter(d => d.status === 'completed' && d.confidence_score);
+  const avgConfidence = completedDocsWithConfidence.length > 0
+    ? (completedDocsWithConfidence.reduce((sum, d) => sum + (d.confidence_score || 0), 0) / completedDocsWithConfidence.length).toFixed(1)
+    : '0.0';
 
   const getStatusIcon = (status: string) => {
     switch(status) {
@@ -129,7 +144,7 @@ const Dashboard = () => {
           <StatCard title="COMPLETED" value={completedDocs} icon={CheckCircle} gradient="from-green-500 to-green-600" />
           <StatCard title="PROCESSING" value={processingDocs} icon={Clock} gradient="from-orange-500 to-orange-600" />
           <StatCard title="EVENTS EXTRACTED" value={totalEvents} icon={TrendingUp} gradient="from-purple-500 to-purple-600" />
-          <StatCard title="AVG TIME (S)" value="0.0" icon={AlertCircle} gradient="from-indigo-500 to-indigo-600" />
+          <StatCard title="AVG TIME (S)" value={avgProcessingTime} icon={AlertCircle} gradient="from-indigo-500 to-indigo-600" />
         </div>
 
         <div className="grid lg:grid-cols-3 gap-6">
@@ -192,21 +207,21 @@ const Dashboard = () => {
                     <div className="w-2 h-2 rounded-full bg-green-500"></div>
                     <span className="text-sm text-muted-foreground">Success Rate</span>
                   </div>
-                  <span className="text-lg font-semibold text-green-600">0.0%</span>
+                  <span className="text-lg font-semibold text-green-600">{successRate}%</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                     <span className="text-sm text-muted-foreground">Avg Confidence</span>
                   </div>
-                  <span className="text-lg font-semibold text-blue-600">0.0%</span>
+                  <span className="text-lg font-semibold text-blue-600">{avgConfidence}%</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <div className="w-2 h-2 rounded-full bg-orange-500"></div>
                     <span className="text-sm text-muted-foreground">Avg Processing Time</span>
                   </div>
-                  <span className="text-lg font-semibold text-orange-600">0.0s</span>
+                  <span className="text-lg font-semibold text-orange-600">{avgProcessingTime}s</span>
                 </div>
                 <div className="pt-4 border-t">
                   <p className="text-sm text-muted-foreground">Total Events Extracted</p>

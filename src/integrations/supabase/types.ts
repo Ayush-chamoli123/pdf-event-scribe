@@ -17,32 +17,38 @@ export type Database = {
       documents: {
         Row: {
           completed_at: string | null
+          confidence_score: number | null
           created_at: string | null
           error_message: string | null
           events_count: number | null
           file_path: string
           filename: string
           id: string
+          processing_time_seconds: number | null
           status: string
         }
         Insert: {
           completed_at?: string | null
+          confidence_score?: number | null
           created_at?: string | null
           error_message?: string | null
           events_count?: number | null
           file_path: string
           filename: string
           id?: string
+          processing_time_seconds?: number | null
           status?: string
         }
         Update: {
           completed_at?: string | null
+          confidence_score?: number | null
           created_at?: string | null
           error_message?: string | null
           events_count?: number | null
           file_path?: string
           filename?: string
           id?: string
+          processing_time_seconds?: number | null
           status?: string
         }
         Relationships: []

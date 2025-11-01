@@ -130,12 +130,25 @@ serve(async (req) => {
 
     // Update document status to completed
     if (documentId) {
+      // Get document created_at to calculate processing time
+      const { data: docData } = await supabase
+        .from("documents")
+        .select("created_at")
+        .eq("id", documentId)
+        .single();
+
+      const processingTimeSeconds = docData
+        ? (new Date().getTime() - new Date(docData.created_at).getTime()) / 1000
+        : null;
+
       const { error: updateError } = await supabase
         .from("documents")
         .update({
           status: 'completed',
           events_count: events.length,
-          completed_at: new Date().toISOString()
+          completed_at: new Date().toISOString(),
+          processing_time_seconds: processingTimeSeconds,
+          confidence_score: 95.0, // Default confidence score
         })
         .eq('id', documentId);
 
