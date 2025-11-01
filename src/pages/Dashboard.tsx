@@ -71,15 +71,26 @@ const Dashboard = () => {
 
   // Calculate metrics
   const successRate = totalDocs > 0 ? ((completedDocs / totalDocs) * 100).toFixed(1) : '0.0';
-  
-  const completedDocsWithTime = documents.filter(d => d.status === 'completed' && d.processing_time_seconds);
-  const avgProcessingTime = completedDocsWithTime.length > 0
-    ? (completedDocsWithTime.reduce((sum, d) => sum + (d.processing_time_seconds || 0), 0) / completedDocsWithTime.length).toFixed(1)
+
+  const completedDocsAll = documents.filter(d => d.status === 'completed');
+  const processingTimes = completedDocsAll
+    .map(d => {
+      if (d.processing_time_seconds != null) return d.processing_time_seconds;
+      if (d.completed_at) {
+        return (new Date(d.completed_at).getTime() - new Date(d.created_at).getTime()) / 1000;
+      }
+      return null;
+    })
+    .filter((v): v is number => v !== null && !Number.isNaN(v));
+  const avgProcessingTime = processingTimes.length > 0
+    ? (processingTimes.reduce((sum, t) => sum + t, 0) / processingTimes.length).toFixed(1)
     : '0.0';
-  
-  const completedDocsWithConfidence = documents.filter(d => d.status === 'completed' && d.confidence_score);
-  const avgConfidence = completedDocsWithConfidence.length > 0
-    ? (completedDocsWithConfidence.reduce((sum, d) => sum + (d.confidence_score || 0), 0) / completedDocsWithConfidence.length).toFixed(1)
+
+  const confidences = completedDocsAll
+    .map(d => d.confidence_score)
+    .filter((v): v is number => v != null && !Number.isNaN(v));
+  const avgConfidence = confidences.length > 0
+    ? (confidences.reduce((s, c) => s + c, 0) / confidences.length).toFixed(1)
     : '0.0';
 
   const getStatusIcon = (status: string) => {
