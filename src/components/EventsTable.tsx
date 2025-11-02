@@ -24,62 +24,20 @@ interface Event {
   source_pdf: string;
 }
 
-const EventsTable = () => {
-  const [events, setEvents] = useState<Event[]>([]);
+interface EventsTableProps {
+  events: Event[];
+}
+
+const EventsTable = ({ events }: EventsTableProps) => {
   const [filteredEvents, setFilteredEvents] = useState<Event[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [sortField, setSortField] = useState<keyof Event>("event_date");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
-  const [loading, setLoading] = useState(true);
   const { toast } = useToast();
-
-  useEffect(() => {
-    fetchEvents();
-
-    const channel = supabase
-      .channel("events-changes")
-      .on(
-        "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "events",
-        },
-        () => {
-          fetchEvents();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, []);
 
   useEffect(() => {
     filterAndSortEvents();
   }, [events, searchQuery, sortField, sortDirection]);
-
-  const fetchEvents = async () => {
-    try {
-      const { data, error } = await supabase
-        .from("events")
-        .select("*")
-        .order("event_date", { ascending: true });
-
-      if (error) throw error;
-      setEvents(data || []);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load events",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filterAndSortEvents = () => {
     let filtered = [...events];
@@ -88,7 +46,8 @@ const EventsTable = () => {
       filtered = filtered.filter(
         (event) =>
           event.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          event.source_pdf.toLowerCase().includes(searchQuery.toLowerCase())
+          event.source_pdf.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          format(new Date(event.event_date), "MMM dd, yyyy").toLowerCase().includes(searchQuery.toLowerCase())
       );
     }
 
@@ -160,14 +119,6 @@ const EventsTable = () => {
       description: `${exportData.length} events exported successfully`,
     });
   };
-
-  if (loading) {
-    return (
-      <Card className="p-8">
-        <p className="text-center text-muted-foreground">Loading events...</p>
-      </Card>
-    );
-  }
 
   return (
     <div className="space-y-4">
@@ -275,11 +226,6 @@ const EventsTable = () => {
         </div>
       </Card>
 
-      <div className="flex justify-between items-center text-sm text-muted-foreground">
-        <p>
-          Showing {filteredEvents.length} of {events.length} events
-        </p>
-      </div>
     </div>
   );
 };

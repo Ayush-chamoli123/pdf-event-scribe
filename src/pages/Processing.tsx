@@ -201,7 +201,7 @@ const Processing = () => {
                     </p>
                   </div>
                 )}
-                <EventsTable />
+                <EventsTable events={events} />
               </Card>
             ) : (
               <div className="flex items-center justify-center h-96 bg-card rounded-2xl border">
